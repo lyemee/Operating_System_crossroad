@@ -12,6 +12,9 @@ struct priority_sema
     struct list waiters; // vehicle_info 대기 리스트
 };
 
+// 앰뷸런스 우선 정렬 함수
+bool ambulance_first(const struct list_elem *a, const struct list_elem *b, void *aux);
+
 // 함수 선언
 void priority_sema_init(struct priority_sema *psema, unsigned value);
 void priority_sema_down(struct priority_sema *psema, struct vehicle_info *vi);
