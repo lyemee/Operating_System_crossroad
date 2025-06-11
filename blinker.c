@@ -15,25 +15,25 @@ struct advanced_signal_system global_signal_system;
 
 static int last_step = -1;
 
-// 교차로 위치들 (이미지 기반 - 7x7 맵의 교차로 영역)
+// 교차로 위치들 (7x7 맵의 교차로 영역)
 static const struct position intersection_coords[] = {
     {2, 3}, {3, 2}, {3, 3}, {3, 4}, {4, 3}, // 중앙 교차로 영역
     {-1, -1}                                // 종료 마커
 };
 
-// 신호 패턴들 (이미지의 6가지 시나리오)
+// 이미지 기반 신호 패턴들 (6가지 시나리오)
 static struct signal_pattern signal_patterns[] = {
-    // Phase 0: 동서방향 직진 (그림 1) - 3스텝 지속
+    // Phase 0: 동서방향 직진 (이미지 1) - 3스텝 지속
     {0, 3, {}},
-    // Phase 1: 남북방향 직진 (그림 2) - 3스텝 지속
+    // Phase 1: 남북방향 직진 (이미지 2) - 3스텝 지속
     {1, 3, {}},
-    // Phase 2: 동서방향 좌회전 (그림 3) - 2스텝 지속
+    // Phase 2: 동서방향 좌회전 (이미지 3) - 2스텝 지속
     {2, 2, {}},
-    // Phase 3: 남북방향 좌회전 (그림 4) - 2스텝 지속
+    // Phase 3: 남북방향 좌회전 (이미지 4) - 2스텝 지속
     {3, 2, {}},
-    // Phase 4: 복합 이동 1 (그림 5) - 2스텝 지속
+    // Phase 4: 복합 이동 1 (이미지 5) - 2스텝 지속
     {4, 2, {}},
-    // Phase 5: 복합 이동 2 (그림 6) - 2스텝 지속
+    // Phase 5: 복합 이동 2 (이미지 6) - 2스텝 지속
     {5, 2, {}}};
 
 static const int NUM_SIGNAL_PHASES = sizeof(signal_patterns) / sizeof(signal_patterns[0]);
@@ -81,41 +81,69 @@ static void init_signal_patterns()
         }
     }
 
-    // Phase 0: 동서방향 직진 허용 (그림 1)
-    signal_patterns[0].pattern[3][2][DIR_EAST] = SIGNAL_GREEN; // 서→동 진입
-    signal_patterns[0].pattern[3][3][DIR_EAST] = SIGNAL_GREEN; // 중앙 통과 (동쪽으로)
-    signal_patterns[0].pattern[3][4][DIR_WEST] = SIGNAL_GREEN; // 동→서 진입
-    signal_patterns[0].pattern[3][3][DIR_WEST] = SIGNAL_GREEN; // 중앙 통과 (서쪽으로)
+    // Phase 0: 동서방향 직진 허용 (이미지 1)
+    // 서→동 경로: (3,1) → (3,2) → (3,3) → (3,4) → (3,5)
+    signal_patterns[0].pattern[3][1][DIR_EAST] = SIGNAL_GREEN;
+    signal_patterns[0].pattern[3][2][DIR_EAST] = SIGNAL_GREEN;
+    signal_patterns[0].pattern[3][3][DIR_EAST] = SIGNAL_GREEN;
+    signal_patterns[0].pattern[3][4][DIR_EAST] = SIGNAL_GREEN;
+    // 동→서 경로: (3,5) → (3,4) → (3,3) → (3,2) → (3,1)
+    signal_patterns[0].pattern[3][5][DIR_WEST] = SIGNAL_GREEN;
+    signal_patterns[0].pattern[3][4][DIR_WEST] = SIGNAL_GREEN;
+    signal_patterns[0].pattern[3][3][DIR_WEST] = SIGNAL_GREEN;
+    signal_patterns[0].pattern[3][2][DIR_WEST] = SIGNAL_GREEN;
 
-    // Phase 1: 남북방향 직진 허용 (그림 2)
-    signal_patterns[1].pattern[2][3][DIR_SOUTH] = SIGNAL_GREEN; // 북→남 진입
-    signal_patterns[1].pattern[3][3][DIR_SOUTH] = SIGNAL_GREEN; // 중앙 통과 (남쪽으로)
-    signal_patterns[1].pattern[4][3][DIR_NORTH] = SIGNAL_GREEN; // 남→북 진입
-    signal_patterns[1].pattern[3][3][DIR_NORTH] = SIGNAL_GREEN; // 중앙 통과 (북쪽으로)
+    // Phase 1: 남북방향 직진 허용 (이미지 2)
+    // 북→남 경로: (1,3) → (2,3) → (3,3) → (4,3) → (5,3)
+    signal_patterns[1].pattern[1][3][DIR_SOUTH] = SIGNAL_GREEN;
+    signal_patterns[1].pattern[2][3][DIR_SOUTH] = SIGNAL_GREEN;
+    signal_patterns[1].pattern[3][3][DIR_SOUTH] = SIGNAL_GREEN;
+    signal_patterns[1].pattern[4][3][DIR_SOUTH] = SIGNAL_GREEN;
+    // 남→북 경로: (5,3) → (4,3) → (3,3) → (2,3) → (1,3)
+    signal_patterns[1].pattern[5][3][DIR_NORTH] = SIGNAL_GREEN;
+    signal_patterns[1].pattern[4][3][DIR_NORTH] = SIGNAL_GREEN;
+    signal_patterns[1].pattern[3][3][DIR_NORTH] = SIGNAL_GREEN;
+    signal_patterns[1].pattern[2][3][DIR_NORTH] = SIGNAL_GREEN;
 
-    // Phase 2: 동서방향에서 좌회전 (그림 3)
-    signal_patterns[2].pattern[3][2][DIR_SOUTH] = SIGNAL_GREEN; // 서쪽에서 남쪽으로 좌회전
-    signal_patterns[2].pattern[3][3][DIR_SOUTH] = SIGNAL_GREEN; // 중앙에서 남쪽으로
-    signal_patterns[2].pattern[3][4][DIR_NORTH] = SIGNAL_GREEN; // 동쪽에서 북쪽으로 좌회전
-    signal_patterns[2].pattern[3][3][DIR_NORTH] = SIGNAL_GREEN; // 중앙에서 북쪽으로
+    // Phase 2: 동서방향에서 좌회전 (이미지 3)
+    // 서쪽에서 남쪽으로 좌회전: (3,2) → (3,3) → (4,3)
+    signal_patterns[2].pattern[3][2][DIR_EAST] = SIGNAL_GREEN;  // 교차로 진입
+    signal_patterns[2].pattern[3][3][DIR_SOUTH] = SIGNAL_GREEN; // 좌회전
+    signal_patterns[2].pattern[4][3][DIR_SOUTH] = SIGNAL_GREEN; // 회전 후 직진
+    // 동쪽에서 북쪽으로 좌회전: (3,4) → (3,3) → (2,3)
+    signal_patterns[2].pattern[3][4][DIR_WEST] = SIGNAL_GREEN;  // 교차로 진입
+    signal_patterns[2].pattern[3][3][DIR_NORTH] = SIGNAL_GREEN; // 좌회전
+    signal_patterns[2].pattern[2][3][DIR_NORTH] = SIGNAL_GREEN; // 회전 후 직진
 
-    // Phase 3: 남북방향에서 좌회전 (그림 4)
-    signal_patterns[3].pattern[2][3][DIR_EAST] = SIGNAL_GREEN; // 북쪽에서 동쪽으로 좌회전
-    signal_patterns[3].pattern[3][3][DIR_EAST] = SIGNAL_GREEN; // 중앙에서 동쪽으로
-    signal_patterns[3].pattern[4][3][DIR_WEST] = SIGNAL_GREEN; // 남쪽에서 서쪽으로 좌회전
-    signal_patterns[3].pattern[3][3][DIR_WEST] = SIGNAL_GREEN; // 중앙에서 서쪽으로
+    // Phase 3: 남북방향에서 좌회전 (이미지 4)
+    // 북쪽에서 동쪽으로 좌회전: (2,3) → (3,3) → (3,4)
+    signal_patterns[3].pattern[2][3][DIR_SOUTH] = SIGNAL_GREEN; // 교차로 진입
+    signal_patterns[3].pattern[3][3][DIR_EAST] = SIGNAL_GREEN;  // 좌회전
+    signal_patterns[3].pattern[3][4][DIR_EAST] = SIGNAL_GREEN;  // 회전 후 직진
+    // 남쪽에서 서쪽으로 좌회전: (4,3) → (3,3) → (3,2)
+    signal_patterns[3].pattern[4][3][DIR_NORTH] = SIGNAL_GREEN; // 교차로 진입
+    signal_patterns[3].pattern[3][3][DIR_WEST] = SIGNAL_GREEN;  // 좌회전
+    signal_patterns[3].pattern[3][2][DIR_WEST] = SIGNAL_GREEN;  // 회전 후 직진
 
-    // Phase 4: 복합 패턴 1 (그림 5) - 북→남 직진 + 동→서 직진
-    signal_patterns[4].pattern[2][3][DIR_SOUTH] = SIGNAL_GREEN; // 북→남 직진
-    signal_patterns[4].pattern[3][3][DIR_SOUTH] = SIGNAL_GREEN; // 중앙 통과
-    signal_patterns[4].pattern[3][4][DIR_WEST] = SIGNAL_GREEN;  // 동→서 직진
-    signal_patterns[4].pattern[3][3][DIR_WEST] = SIGNAL_GREEN;  // 중앙 통과
+    // Phase 4: 복합 패턴 1 (이미지 5) - 북→남 직진 + 동→서 직진
+    // 북→남 직진
+    signal_patterns[4].pattern[2][3][DIR_SOUTH] = SIGNAL_GREEN;
+    signal_patterns[4].pattern[3][3][DIR_SOUTH] = SIGNAL_GREEN;
+    signal_patterns[4].pattern[4][3][DIR_SOUTH] = SIGNAL_GREEN;
+    // 동→서 직진
+    signal_patterns[4].pattern[3][4][DIR_WEST] = SIGNAL_GREEN;
+    signal_patterns[4].pattern[3][3][DIR_WEST] = SIGNAL_GREEN;
+    signal_patterns[4].pattern[3][2][DIR_WEST] = SIGNAL_GREEN;
 
-    // Phase 5: 복합 패턴 2 (그림 6) - 남→북 직진 + 서→동 직진
-    signal_patterns[5].pattern[4][3][DIR_NORTH] = SIGNAL_GREEN; // 남→북 직진
-    signal_patterns[5].pattern[3][3][DIR_NORTH] = SIGNAL_GREEN; // 중앙 통과
-    signal_patterns[5].pattern[3][2][DIR_EAST] = SIGNAL_GREEN;  // 서→동 직진
-    signal_patterns[5].pattern[3][3][DIR_EAST] = SIGNAL_GREEN;  // 중앙 통과
+    // Phase 5: 복합 패턴 2 (이미지 6) - 남→북 직진 + 서→동 직진
+    // 남→북 직진
+    signal_patterns[5].pattern[4][3][DIR_NORTH] = SIGNAL_GREEN;
+    signal_patterns[5].pattern[3][3][DIR_NORTH] = SIGNAL_GREEN;
+    signal_patterns[5].pattern[2][3][DIR_NORTH] = SIGNAL_GREEN;
+    // 서→동 직진
+    signal_patterns[5].pattern[3][2][DIR_EAST] = SIGNAL_GREEN;
+    signal_patterns[5].pattern[3][3][DIR_EAST] = SIGNAL_GREEN;
+    signal_patterns[5].pattern[3][4][DIR_EAST] = SIGNAL_GREEN;
 }
 
 static void update_advanced_signals()
@@ -141,8 +169,29 @@ static void update_advanced_signals()
         }
     }
 
-    printf("[ADVANCED SIGNAL] Phase %d activated (duration: %d steps)\n",
-           global_signal_system.current_phase, current->duration_steps);
+    printf("[SIGNAL] Phase %d: ", global_signal_system.current_phase);
+    switch (global_signal_system.current_phase)
+    {
+    case 0:
+        printf("동서방향 직진 허용");
+        break;
+    case 1:
+        printf("남북방향 직진 허용");
+        break;
+    case 2:
+        printf("동서방향 좌회전 허용");
+        break;
+    case 3:
+        printf("남북방향 좌회전 허용");
+        break;
+    case 4:
+        printf("복합 이동 1 (북→남 + 동→서)");
+        break;
+    case 5:
+        printf("복합 이동 2 (남→북 + 서→동)");
+        break;
+    }
+    printf(" (duration: %d steps)\n", current->duration_steps);
 
     // 신호 변경 알림
     cond_broadcast(&global_signal_system.signal_cond, &global_signal_system.signal_lock);
@@ -175,9 +224,22 @@ bool can_vehicle_pass_signal(struct position from, struct position to, struct ve
     direction_t move_dir = get_move_direction(from, to);
     signal_state_t signal = global_signal_system.intersections[from.row][from.col].directions[move_dir];
 
+    // 앰뷸런스 특별 처리: 응급상황시 신호 무시 가능 (제한적)
+    bool is_emergency = (vehicle->type == VEHICL_TYPE_AMBULANCE);
+    bool emergency_override = false;
+
+    if (is_emergency && signal == SIGNAL_RED)
+    {
+        // 앰뷸런스는 교차로에서 안전하게 진입 가능한 경우에만 신호 무시
+        // 실제로는 더 복잡한 안전 검증이 필요하지만, 여기서는 단순화
+        emergency_override = true;
+        printf("[EMERGENCY] Ambulance %c overriding signal at (%d,%d)\n",
+               vehicle->id, from.row, from.col);
+    }
+
     lock_release(&global_signal_system.signal_lock);
 
-    bool can_pass = (signal == SIGNAL_GREEN);
+    bool can_pass = (signal == SIGNAL_GREEN) || emergency_override;
 
     return can_pass;
 }
@@ -218,7 +280,8 @@ void init_blinker(struct blinker_info *blinkers, struct lock **map_locks, struct
     init_signal_patterns();
     update_advanced_signals();
 
-    printf("[BLINKER] Advanced signal system initialized with %d phases\n", NUM_SIGNAL_PHASES);
+    printf("[BLINKER] Advanced 6-phase signal system initialized\n");
+    printf("[BLINKER] Signal patterns match traffic flow images\n");
 }
 
 static void blinker_thread(void *aux UNUSED)
@@ -248,7 +311,6 @@ static void blinker_thread(void *aux UNUSED)
         if (global_signal_system.phase_step_count >=
             signal_patterns[global_signal_system.current_phase].duration_steps)
         {
-
             // 다음 페이즈로 전환
             global_signal_system.current_phase =
                 (global_signal_system.current_phase + 1) % NUM_SIGNAL_PHASES;
@@ -272,5 +334,5 @@ static void blinker_thread(void *aux UNUSED)
 void start_blinker()
 {
     thread_create("blinker", PRI_DEFAULT + 1, blinker_thread, NULL);
-    printf("[BLINKER] Advanced blinker thread started\n");
+    printf("[BLINKER] Advanced 6-phase blinker thread started\n");
 }
