@@ -86,12 +86,15 @@ static void init_signal_patterns()
     signal_patterns[0].pattern[3][3][DIR_EAST] = SIGNAL_GREEN; // 중앙 통과 (동쪽으로)
     signal_patterns[0].pattern[3][4][DIR_WEST] = SIGNAL_GREEN; // 동→서 진입
     signal_patterns[0].pattern[3][3][DIR_WEST] = SIGNAL_GREEN; // 중앙 통과 (서쪽으로)
+    signal_patterns[0].pattern[4][3][DIR_EAST] = SIGNAL_GREEN;
+    signal_patterns[0].pattern[2][3][DIR_WEST] = SIGNAL_GREEN;
 
     // Phase 1: 남북방향 직진 허용 (그림 2)
     signal_patterns[1].pattern[2][3][DIR_SOUTH] = SIGNAL_GREEN; // 북→남 진입
     signal_patterns[1].pattern[3][3][DIR_SOUTH] = SIGNAL_GREEN; // 중앙 통과 (남쪽으로)
     signal_patterns[1].pattern[4][3][DIR_NORTH] = SIGNAL_GREEN; // 남→북 진입
     signal_patterns[1].pattern[3][3][DIR_NORTH] = SIGNAL_GREEN; // 중앙 통과 (북쪽으로)
+    signal_patterns[1].pattern[3][4][DIR_NORTH] = SIGNAL_GREEN;
 
     // Phase 2: 동서방향에서 좌회전 (그림 3)
     signal_patterns[2].pattern[3][2][DIR_SOUTH] = SIGNAL_GREEN; // 서쪽에서 남쪽으로 좌회전
@@ -116,6 +119,8 @@ static void init_signal_patterns()
     signal_patterns[5].pattern[3][3][DIR_NORTH] = SIGNAL_GREEN; // 중앙 통과
     signal_patterns[5].pattern[3][2][DIR_EAST] = SIGNAL_GREEN;  // 서→동 직진
     signal_patterns[5].pattern[3][3][DIR_EAST] = SIGNAL_GREEN;  // 중앙 통과
+
+    signal_patterns[1].pattern[3][2][DIR_SOUTH] = SIGNAL_GREEN;
 }
 
 static void update_advanced_signals()
