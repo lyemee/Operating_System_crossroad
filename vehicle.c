@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -9,6 +8,16 @@
 #include "projects/crossroads/vehicle.h"
 #include "projects/crossroads/map.h"
 #include "projects/crossroads/ats.h"
+#include "projects/crossroads/crossroads.h"
+
+/* 단위 스텝 동기화를 위한 전역 변수들 */
+static int total_vehicles = 0;
+static int active_vehicles = 0;
+static int vehicles_moved = 0;
+
+static struct lock step_sync_lock;
+static struct condition step_sync_cond;
+static struct lock ats_protection_lock;
 
 /* path. A:0 B:1 C:2 D:3 */
 const struct position vehicle_path[4][4][12] = {
@@ -252,13 +261,11 @@ void parse_vehicles(struct vehicle_info *vehicle_info, char *input)
 	}
 }
 
-// original function
 static int is_position_outside(struct position pos)
 {
 	return (pos.row == -1 || pos.col == -1);
 }
 
-// original function
 /* return 0:termination, 1:success, -1:fail */
 static int try_move(int start, int dest, int step, struct vehicle_info *vi)
 {
@@ -298,18 +305,66 @@ static int try_move(int start, int dest, int step, struct vehicle_info *vi)
 	return 1;
 }
 
-// original function
+/* 단위 스텝 동기화 시스템 초기화 */
 void init_on_mainthread(int thread_cnt)
 {
-	/* Called once before spawning threads */
+	total_vehicles = thread_cnt;
+	active_vehicles = thread_cnt;
+	vehicles_moved = 0;
+
+	lock_init(&step_sync_lock);
+	cond_init(&step_sync_cond);
+	lock_init(&ats_protection_lock);
+
+	printf("단위 스텝 동기화 시스템 초기화 완료 (차량 수: %d)\n", thread_cnt);
 }
 
-// original function
+/* 단위 스텝 동기화 배리어 함수 - 여기에 있습니다! */
+static void step_barrier(void)
+{
+	lock_acquire(&step_sync_lock);
+
+	vehicles_moved++;
+
+	/* 모든 활성 차량이 도달했는지 확인 */
+	if (vehicles_moved >= active_vehicles)
+	{
+
+		/* 스텝 증가 */
+		lock_acquire(&ats_protection_lock);
+		crossroads_step++;
+		unitstep_changed();
+		lock_release(&ats_protection_lock);
+
+		/* 리셋 */
+		vehicles_moved = 0;
+
+		/* 모든 대기자 깨우기 */
+		cond_broadcast(&step_sync_cond, &step_sync_lock);
+	}
+	else
+	{
+		/* 조건 변수로 대기 */
+		cond_wait(&step_sync_cond, &step_sync_lock);
+	}
+
+	lock_release(&step_sync_lock);
+}
+
+/* 차량 종료 처리 */
+static void vehicle_finished(void)
+{
+	lock_acquire(&step_sync_lock);
+	active_vehicles--;
+	cond_broadcast(&step_sync_cond, &step_sync_lock);
+	lock_release(&step_sync_lock);
+}
+
+/* 메인 차량 루프 */
 void vehicle_loop(void *_vi)
 {
 	int res;
 	int start, dest, step;
-
 	struct vehicle_info *vi = _vi;
 
 	start = vi->start - 'A';
@@ -321,23 +376,38 @@ void vehicle_loop(void *_vi)
 	step = 0;
 	while (1)
 	{
-		/* vehicle main code */
-		res = try_move(start, dest, step, vi);
-		if (res == 1)
+
+		/* 앰뷸런스의 경우 출발 시간 체크 */
+		if (vi->type == VEHICL_TYPE_AMBULANCE && vi->arrival > crossroads_step)
 		{
-			step++;
+			printf("[앰뷸런스 %c] 출발 시간 대기 중 (현재:%d, 출발:%d)\n",
+				   vi->id, crossroads_step, vi->arrival);
+		}
+		else
+		{
+			/* 차량 이동 시도 */
+			res = try_move(start, dest, step, vi);
+			if (res == 1)
+			{
+				step++;
+			}
+			else if (res == -1)
+			{
+				printf("[차량 %c] 스텝 %d에서 이동 실패 - 대기\n",
+					   vi->id, crossroads_step);
+			}
+			else if (res == 0)
+			{
+				step_barrier(); /* 마지막 배리어 통과 */
+				break;
+			}
 		}
 
-		/* termination condition. */
-		if (res == 0)
-		{
-			break;
-		}
-
-		/* unitstep change! */
-		unitstep_changed();
+		step_barrier(); /* 스텝 동기화 */
 	}
 
-	/* status transition must happen before sema_up */
+	/* 차량 종료 처리 */
 	vi->state = VEHICLE_STATUS_FINISHED;
+	vehicle_finished();
+	printf("[차량 %c] 시뮬레이션 종료\n", vi->id);
 }
