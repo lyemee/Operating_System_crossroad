@@ -20,6 +20,9 @@ void start_blinker();
 /* 교차로 진입/퇴장 제어 함수들 */
 bool acquire_intersection_permission(struct vehicle_info *vi, struct position pos);
 void release_intersection_permission(struct vehicle_info *vi, struct position pos);
+
+/* 새로 추가된 함수들 */
+void update_intersection_step(struct vehicle_info *vi, struct position pos);
 void print_intersection_status(void);
 
 #endif /* __PROJECTS_PROJECT2_BLINKER_H__ */
