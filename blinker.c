@@ -46,93 +46,106 @@ static const struct position route_intersection_path[ROUTE_COUNT][10] = {
     /* D->C */ {{2, 2}, {3, 2}, {4, 2}, {4, 3}, {4, 4}, {-1, -1}},
     /* D->D */ {{2, 2}, {3, 2}, {4, 2}, {4, 3}, {4, 4}, {3, 4}, {2, 4}, {-1, -1}}};
 
-/* 허용되는 경로 조합 테이블 - 사용자 요구사항 기반 */
+/* 허용되는 경로 조합 테이블 */
 static const int allowed_route_combinations[][2] = {
     /* 서로 직진 조합 */
     {ROUTE_AC, ROUTE_CA},
-    {ROUTE_CA, ROUTE_AC}, // A->C + C->A
+    {ROUTE_CA, ROUTE_AC},
     {ROUTE_BD, ROUTE_DB},
-    {ROUTE_DB, ROUTE_BD}, // B->D + D->B
+    {ROUTE_DB, ROUTE_BD},
 
     /* 이웃끼리 */
     {ROUTE_AB, ROUTE_BA},
-    {ROUTE_BA, ROUTE_AB}, // A->B + B->A
+    {ROUTE_BA, ROUTE_AB},
     {ROUTE_AD, ROUTE_DA},
-    {ROUTE_DA, ROUTE_AD}, // A->D + D->A
+    {ROUTE_DA, ROUTE_AD},
     {ROUTE_CD, ROUTE_DC},
-    {ROUTE_DC, ROUTE_CD}, // C->D + D->C
+    {ROUTE_DC, ROUTE_CD},
     {ROUTE_BC, ROUTE_CB},
-    {ROUTE_CB, ROUTE_BC}, // B->C + C->B
+    {ROUTE_CB, ROUTE_BC},
     {ROUTE_BD, ROUTE_DA},
-    {ROUTE_DA, ROUTE_BD}, // B->D + D->A
+    {ROUTE_DA, ROUTE_BD},
     {ROUTE_BD, ROUTE_AB},
-    {ROUTE_AB, ROUTE_BD}, // B->D + A->B
+    {ROUTE_AB, ROUTE_BD},
     {ROUTE_DB, ROUTE_CD},
-    {ROUTE_CD, ROUTE_DB}, // D->B + C->D
+    {ROUTE_CD, ROUTE_DB},
     {ROUTE_DB, ROUTE_BC},
-    {ROUTE_BC, ROUTE_DB}, // D->B + B->C
+    {ROUTE_BC, ROUTE_DB},
     {ROUTE_AC, ROUTE_CD},
-    {ROUTE_CD, ROUTE_AC}, // A->C + C->D
+    {ROUTE_CD, ROUTE_AC},
     {ROUTE_AC, ROUTE_DA},
-    {ROUTE_DA, ROUTE_AC}, // A->C + D->A
+    {ROUTE_DA, ROUTE_AC},
     {ROUTE_CA, ROUTE_AB},
-    {ROUTE_AB, ROUTE_CA}, // C->A + A->B
+    {ROUTE_AB, ROUTE_CA},
     {ROUTE_CA, ROUTE_BC},
-    {ROUTE_BC, ROUTE_CA}, // C->A + B->C
+    {ROUTE_BC, ROUTE_CA},
 
     /* 유턴 차량 조합 */
     {ROUTE_AA, ROUTE_AB},
-    {ROUTE_AB, ROUTE_AA}, // A->A + A->B
+    {ROUTE_AB, ROUTE_AA},
     {ROUTE_AA, ROUTE_AC},
-    {ROUTE_AC, ROUTE_AA}, // A->A + A->C
+    {ROUTE_AC, ROUTE_AA},
     {ROUTE_AA, ROUTE_AD},
-    {ROUTE_AD, ROUTE_AA}, // A->A + A->D
+    {ROUTE_AD, ROUTE_AA},
     {ROUTE_BB, ROUTE_BA},
-    {ROUTE_BA, ROUTE_BB}, // B->B + B->A
+    {ROUTE_BA, ROUTE_BB},
     {ROUTE_BB, ROUTE_BC},
-    {ROUTE_BC, ROUTE_BB}, // B->B + B->C
+    {ROUTE_BC, ROUTE_BB},
     {ROUTE_BB, ROUTE_BD},
-    {ROUTE_BD, ROUTE_BB}, // B->B + B->D
+    {ROUTE_BD, ROUTE_BB},
     {ROUTE_CC, ROUTE_CA},
-    {ROUTE_CA, ROUTE_CC}, // C->C + C->A
+    {ROUTE_CA, ROUTE_CC},
     {ROUTE_CC, ROUTE_CB},
-    {ROUTE_CB, ROUTE_CC}, // C->C + C->B
+    {ROUTE_CB, ROUTE_CC},
     {ROUTE_CC, ROUTE_CD},
-    {ROUTE_CD, ROUTE_CC}, // C->C + C->D
+    {ROUTE_CD, ROUTE_CC},
     {ROUTE_DD, ROUTE_DA},
-    {ROUTE_DA, ROUTE_DD}, // D->D + D->A
+    {ROUTE_DA, ROUTE_DD},
     {ROUTE_DD, ROUTE_DB},
-    {ROUTE_DB, ROUTE_DD}, // D->D + D->B
+    {ROUTE_DB, ROUTE_DD},
     {ROUTE_DD, ROUTE_DC},
-    {ROUTE_DC, ROUTE_DD}, // D->D + D->C
+    {ROUTE_DC, ROUTE_DD},
 
     /* in and out */
     {ROUTE_AB, ROUTE_BC},
-    {ROUTE_BC, ROUTE_AB}, // A->B + B->C
+    {ROUTE_BC, ROUTE_AB},
     {ROUTE_BC, ROUTE_CD},
-    {ROUTE_CD, ROUTE_BC}, // B->C + C->D
+    {ROUTE_CD, ROUTE_BC},
     {ROUTE_CD, ROUTE_DA},
-    {ROUTE_DA, ROUTE_CD}, // C->D + D->A
+    {ROUTE_DA, ROUTE_CD},
     {ROUTE_DA, ROUTE_AB},
-    {ROUTE_AB, ROUTE_DA}, // D->A + A->B
+    {ROUTE_AB, ROUTE_DA},
 
-    /* 종료 마커 */
     {-1, -1}};
 
-static bool route_conflict[ROUTE_COUNT][ROUTE_COUNT];
+/* 🚑 앰뷸런스 예측 시스템 */
+typedef struct
+{
+    bool is_active;                      // 앰뷸런스 예측 활성 여부
+    route_id_t ambulance_route;          // 앰뷸런스 경로
+    int arrival_step;                    // 앰뷸런스 도착 예정 스텝
+    int current_step;                    // 현재 시스템 스텝
+    bool priority_vehicles[ROUTE_COUNT]; // 우선권 부여된 일반차량들
+} ambulance_prediction_t;
 
-static struct priority_semaphore intersection_semaphore;
+static ambulance_prediction_t ambulance_prediction;
 
-/* 활성 경로 정보 - 시간 정보 포함 */
+/* 활성 경로 정보 - 개선된 버전 */
 typedef struct
 {
     bool active;
-    int step_count; /* 해당 경로를 사용한 스텝 수 */
-    int vehicle_id; /* 차량 ID (디버깅용) */
+    int step_count;
+    char vehicle_id;
+    int vehicle_type;         // 차량 타입 추가
+    int distance_from_entry;  // 교차로 진입점으로부터의 거리
+    bool has_priority_signal; // 우선 신호 보유 여부
 } active_route_info_t;
 
+static bool route_conflict[ROUTE_COUNT][ROUTE_COUNT];
+static struct priority_semaphore intersection_semaphore;
 static active_route_info_t active_routes[ROUTE_COUNT];
 static struct lock route_tracking_lock;
+static struct lock ambulance_prediction_lock;
 
 static route_id_t get_route_id(char start, char dest)
 {
@@ -141,11 +154,11 @@ static route_id_t get_route_id(char start, char dest)
     return (route_id_t)(s * 4 + d);
 }
 
-/* 허용 조합 테이블에서 두 경로가 허용되는지 확인 */
+/* 허용 조합 확인 */
 static bool is_allowed_combination(route_id_t route1, route_id_t route2)
 {
     if (route1 == route2)
-        return false; // 같은 경로는 불가
+        return false;
 
     for (int i = 0; allowed_route_combinations[i][0] != -1; i++)
     {
@@ -158,7 +171,7 @@ static bool is_allowed_combination(route_id_t route1, route_id_t route2)
     return false;
 }
 
-/* 기존 충돌 검사 함수 (백업용) */
+/* 공간 기반 충돌 검사 */
 static bool check_route_conflict_spatial(route_id_t route1, route_id_t route2)
 {
     if (route1 == route2)
@@ -183,20 +196,122 @@ static bool check_route_conflict_spatial(route_id_t route1, route_id_t route2)
     return false;
 }
 
-/* 개선된 충돌 검사 - 허용 조합 테이블 우선, 그 다음 기존 로직 */
+/* 개선된 충돌 검사 */
 static bool check_route_conflict(route_id_t route1, route_id_t route2)
 {
     if (route1 == route2)
         return false;
 
-    /* 1. 먼저 허용 조합 테이블 확인 */
     if (is_allowed_combination(route1, route2))
     {
-        return false; /* 허용 조합이므로 충돌 없음 */
+        return false;
     }
 
-    /* 2. 허용 조합에 없으면 기존 공간 기반 충돌 검사 */
     return check_route_conflict_spatial(route1, route2);
+}
+
+/* 🚑 앰뷸런스 예측 시스템 초기화 */
+static void init_ambulance_prediction(void)
+{
+    lock_init(&ambulance_prediction_lock);
+    ambulance_prediction.is_active = false;
+    ambulance_prediction.ambulance_route = -1;
+    ambulance_prediction.arrival_step = -1;
+    ambulance_prediction.current_step = 0;
+
+    for (int i = 0; i < ROUTE_COUNT; i++)
+    {
+        ambulance_prediction.priority_vehicles[i] = false;
+    }
+}
+
+/* 🚑 앰뷸런스 경로 등록 */
+void register_ambulance_route(char start, char dest, int arrival_step)
+{
+    lock_acquire(&ambulance_prediction_lock);
+
+    ambulance_prediction.is_active = true;
+    ambulance_prediction.ambulance_route = get_route_id(start, dest);
+    ambulance_prediction.arrival_step = arrival_step;
+
+    lock_release(&ambulance_prediction_lock);
+}
+
+/* 🚑 경로상 일반차량에게 우선 신호 부여 */
+static bool should_give_priority_signal(route_id_t vehicle_route, char vehicle_id)
+{
+    if (!ambulance_prediction.is_active)
+        return false;
+
+    lock_acquire(&ambulance_prediction_lock);
+
+    route_id_t amb_route = ambulance_prediction.ambulance_route;
+    int steps_until_ambulance = ambulance_prediction.arrival_step - ambulance_prediction.current_step;
+
+    bool give_priority = false;
+
+    // 앰뷸런스가 3스텝 이내에 올 예정이고, 같은 경로에 있는 일반차량
+    if (steps_until_ambulance <= 3 && steps_until_ambulance > 0)
+    {
+
+        // 1. 앰뷸런스와 같은 경로의 차량
+        if (vehicle_route == amb_route)
+        {
+            give_priority = true;
+        }
+
+        // 2. 앰뷸런스 경로와 교차하는 차량 중 먼저 비워야 할 차량
+        else if (check_route_conflict_spatial(vehicle_route, amb_route))
+        {
+            const struct position *amb_path = route_intersection_path[amb_route];
+            const struct position *vehicle_path = route_intersection_path[vehicle_route];
+
+            // 앰뷸런스 진입점에 가까운 차량부터 우선권 부여
+            for (int i = 0; i < 3 && amb_path[i].row != -1; i++)
+            {
+                for (int j = 0; vehicle_path[j].row != -1; j++)
+                {
+                    if (amb_path[i].row == vehicle_path[j].row &&
+                        amb_path[i].col == vehicle_path[j].col)
+                    {
+                        give_priority = true;
+                        goto priority_decided;
+                    }
+                }
+            }
+        priority_decided:;
+        }
+    }
+
+    if (give_priority)
+    {
+        ambulance_prediction.priority_vehicles[vehicle_route] = true;
+    }
+
+    lock_release(&ambulance_prediction_lock);
+    return give_priority;
+}
+
+/* 스텝 업데이트 */
+void update_ambulance_prediction_step(int current_step)
+{
+    lock_acquire(&ambulance_prediction_lock);
+    ambulance_prediction.current_step = current_step;
+
+    // 앰뷸런스가 도착했으면 예측 시스템 비활성화
+    if (ambulance_prediction.is_active &&
+        current_step >= ambulance_prediction.arrival_step)
+    {
+        ambulance_prediction.is_active = false;
+
+        // 우선권 부여 초기화
+        for (int i = 0; i < ROUTE_COUNT; i++)
+        {
+            ambulance_prediction.priority_vehicles[i] = false;
+        }
+    }
+
+    lock_release(&ambulance_prediction_lock);
 }
 
 static void init_conflict_table(void)
@@ -224,18 +339,29 @@ static void init_conflict_table(void)
     }
 }
 
-/* 교차로 진입 가능 여부 확인 - 개선된 버전 */
-static bool can_enter_intersection(route_id_t my_route, char vehicle_id)
+/* 개선된 교차로 진입 가능 여부 확인 */
+static bool can_enter_intersection(route_id_t my_route, char vehicle_id, int vehicle_type)
 {
     lock_acquire(&route_tracking_lock);
+
+    // 🚑 우선 신호 확인 (일반차량만)
+    bool has_priority = false;
+    if (vehicle_type == VEHICL_TYPE_NORMAL)
+    {
+        has_priority = should_give_priority_signal(my_route, vehicle_id);
+    }
 
     /* 현재 활성화된 경로들과 충돌 검사 */
     for (int i = 0; i < ROUTE_COUNT; i++)
     {
         if (active_routes[i].active && route_conflict[my_route][i])
         {
-            lock_release(&route_tracking_lock);
-            return false; // 충돌하는 활성 경로 존재
+            // 우선 신호가 있으면 일반 차량도 통과 가능
+            if (!has_priority)
+            {
+                lock_release(&route_tracking_lock);
+                return false;
+            }
         }
     }
 
@@ -243,28 +369,33 @@ static bool can_enter_intersection(route_id_t my_route, char vehicle_id)
     active_routes[my_route].active = true;
     active_routes[my_route].step_count = 0;
     active_routes[my_route].vehicle_id = vehicle_id;
+    active_routes[my_route].vehicle_type = vehicle_type;
+    active_routes[my_route].distance_from_entry = 0;
+    active_routes[my_route].has_priority_signal = has_priority;
 
     lock_release(&route_tracking_lock);
     return true;
 }
 
-/* 교차로 퇴장 처리 - 개선된 버전 */
+/* 교차로 퇴장 처리 */
 static void exit_intersection(route_id_t my_route)
 {
     lock_acquire(&route_tracking_lock);
     active_routes[my_route].active = false;
     active_routes[my_route].step_count = 0;
     active_routes[my_route].vehicle_id = 0;
+    active_routes[my_route].has_priority_signal = false;
     lock_release(&route_tracking_lock);
 }
 
-/* 단계별 스텝 카운트 업데이트 */
+/* 스텝 카운트 업데이트 */
 static void update_route_step(route_id_t my_route)
 {
     lock_acquire(&route_tracking_lock);
     if (active_routes[my_route].active)
     {
         active_routes[my_route].step_count++;
+        active_routes[my_route].distance_from_entry++;
     }
     lock_release(&route_tracking_lock);
 }
@@ -272,10 +403,10 @@ static void update_route_step(route_id_t my_route)
 /* 신호등 시스템 초기화 */
 void init_blinker(struct blinker_info *blinkers, struct lock **map_locks, struct vehicle_info *vehicle_info)
 {
-    /* 교차로 전체 제어용 우선순위 세마포어 - 앰뷸런스 우선 처리 */
-    priority_sema_init(&intersection_semaphore, 6); // 허용 조합 증가로 인해 확대
+    /* 스마트 우선순위 세마포어 */
+    priority_sema_init(&intersection_semaphore, 8); // 예측 시스템으로 더 많은 동시 진입 가능
 
-    /* 경로 추적을 위한 락 초기화 */
+    /* 경로 추적 락 초기화 */
     lock_init(&route_tracking_lock);
 
     /* 모든 경로 비활성화 */
@@ -284,10 +415,14 @@ void init_blinker(struct blinker_info *blinkers, struct lock **map_locks, struct
         active_routes[i].active = false;
         active_routes[i].step_count = 0;
         active_routes[i].vehicle_id = 0;
+        active_routes[i].vehicle_type = VEHICL_TYPE_NORMAL;
+        active_routes[i].distance_from_entry = 0;
+        active_routes[i].has_priority_signal = false;
     }
 
-    /* 충돌 테이블 초기화 */
+    /* 충돌 테이블 및 앰뷸런스 예측 시스템 초기화 */
     init_conflict_table();
+    init_ambulance_prediction();
 
     blinkers->map_locks = map_locks;
     blinkers->vehicles = vehicle_info;
@@ -308,23 +443,41 @@ bool acquire_intersection_permission(struct vehicle_info *vi, struct position po
 
     route_id_t my_route = get_route_id(vi->start, vi->dest);
 
-    /* 경로 충돌 체크 - 개선된 로직 사용 */
-    if (can_enter_intersection(my_route, vi->id))
+    /* 앰뷸런스인 경우 경로 등록 */
+    if (vi->type == VEHICL_TYPE_AMBULANCE)
     {
-        /* 우선순위 세마포어 획득 - 차량 타입에 따라 다른 처리 */
+        register_ambulance_route(vi->start, vi->dest, vi->arrival);
+    }
+
+    /* 개선된 진입 가능 여부 확인 */
+    if (can_enter_intersection(my_route, vi->id, vi->type))
+    {
+
+        /* 차량 타입에 따른 우선순위 세마포어 처리 */
         if (vi->type == VEHICL_TYPE_AMBULANCE)
         {
             priority_sema_down_ambulance(&intersection_semaphore, vi->arrival, vi->golden_time);
         }
         else
         {
-            priority_sema_down_normal(&intersection_semaphore);
+            // 우선 신호가 있는 일반차량도 빠른 처리
+            if (active_routes[my_route].has_priority_signal)
+            {
+                // 세마포어 수정사항!!!
+                intersection_semaphore.value--; // 직접 값 감소
+
+                // priority_sema_down_normal(&intersection_semaphore); // 수정 필요!
+            }
+            else
+            {
+                priority_sema_down_normal(&intersection_semaphore);
+            }
         }
         return true;
     }
     else
     {
-        return false; // 충돌로 인한 진입 실패
+        return false;
     }
 }
 
@@ -337,12 +490,11 @@ void release_intersection_permission(struct vehicle_info *vi, struct position po
         route_id_t my_route = get_route_id(vi->start, vi->dest);
         exit_intersection(my_route);
 
-        /* 우선순위 세마포어 해제 */
         priority_sema_up(&intersection_semaphore);
     }
 }
 
-/* 스텝 업데이트 함수 (교차로 내에서 호출) */
+/* 스텝 업데이트 */
 void update_intersection_step(struct vehicle_info *vi, struct position pos)
 {
     /* 교차로 내부에서만 스텝 카운트 업데이트 */
@@ -366,10 +518,23 @@ void print_intersection_status(void)
         {
             char start = 'A' + (i / 4);
             char dest = 'A' + (i % 4);
+            const char *type_icon = (active_routes[i].vehicle_type == VEHICL_TYPE_AMBULANCE) ? "🚑" : (active_routes[i].has_priority_signal) ? "🚨"
+                                                                                                                                             : "🚗";
+            const char *priority_text = active_routes[i].has_priority_signal ? "(우선신호)" : "";
 
             any_active = true;
         }
     }
+
+    // 앰뷸런스 예측 정보 출력
+    lock_acquire(&ambulance_prediction_lock);
+    if (ambulance_prediction.is_active)
+    {
+        char amb_start = 'A' + (ambulance_prediction.ambulance_route / 4);
+        char amb_dest = 'A' + (ambulance_prediction.ambulance_route % 4);
+        int steps_remaining = ambulance_prediction.arrival_step - ambulance_prediction.current_step;
+    }
+    lock_release(&ambulance_prediction_lock);
 
     lock_release(&route_tracking_lock);
 }

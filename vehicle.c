@@ -9,7 +9,7 @@
 #include "projects/crossroads/map.h"
 #include "projects/crossroads/ats.h"
 #include "projects/crossroads/crossroads.h"
-#include "projects/crossroads/blinker.h" /* 신호등 시스템 추가 */
+#include "projects/crossroads/blinker.h"
 
 /* 단위 스텝 동기화를 위한 전역 변수들 */
 static int total_vehicles = 0;
@@ -19,6 +19,9 @@ static int vehicles_moved = 0;
 static struct lock step_sync_lock;
 static struct condition step_sync_cond;
 static struct lock ats_protection_lock;
+
+/* 🚑 스마트 우선순위 시스템에 추가된 함수 선언 */
+extern void update_ambulance_prediction_step(int current_step);
 
 /* path. A:0 B:1 C:2 D:3 */
 const struct position vehicle_path[4][4][12] = {
@@ -256,7 +259,7 @@ void parse_vehicles(struct vehicle_info *vehicle_info, char *input)
 		v->state = VEHICLE_STATUS_READY;
 		v->position.row = -1;
 		v->position.col = -1;
-		v->map_locks = NULL; // 이후에 초기화 필요
+		v->map_locks = NULL;
 
 		idx++;
 	}
@@ -305,13 +308,12 @@ static int try_move(int start, int dest, int step, struct vehicle_info *vi)
 		}
 	}
 
-	/* 교차로 진입 시 신호등 시스템 확인 */
+	/* 🚑 교차로 진입 시 스마트 우선순위 시스템 확인 */
 	if (!was_in_intersection && will_be_in_intersection)
 	{
 		/* 교차로 진입 권한 요청 */
 		if (!acquire_intersection_permission(vi, pos_next))
 		{
-
 			return -1; /* 진입 실패 - 대기 */
 		}
 	}
@@ -359,7 +361,7 @@ void init_on_mainthread(int thread_cnt)
 	lock_init(&ats_protection_lock);
 }
 
-/* 단위 스텝 동기화 배리어 함수 - 여기에 있습니다! */
+/* 단위 스텝 동기화 배리어 함수 */
 static void step_barrier(void)
 {
 	lock_acquire(&step_sync_lock);
@@ -373,10 +375,14 @@ static void step_barrier(void)
 		lock_acquire(&ats_protection_lock);
 		crossroads_step++;
 		unitstep_changed();
+
+		/* 🚑 스마트 우선순위 시스템에 현재 스텝 알림 */
+		update_ambulance_prediction_step(crossroads_step);
+
 		lock_release(&ats_protection_lock);
 
 		/* 교차로 상태 출력 (주기적으로) */
-		if (crossroads_step % 5 == 0)
+		if (crossroads_step % 3 == 0)
 		{
 			print_intersection_status();
 		}
@@ -418,13 +424,13 @@ void vehicle_loop(void *_vi)
 	vi->position.row = vi->position.col = -1;
 	vi->state = VEHICLE_STATUS_READY;
 
-	step = 0;
+	step = 0; // unit step은 0부터, 차는 1에 앞으로 전진
 	while (1)
 	{
-		/* 앰뷸런스의 경우 출발 시간 체크 */
+		/* 🚑 앰뷸런스의 경우 출발 시간 체크 */
 		if (vi->type == VEHICL_TYPE_AMBULANCE && vi->arrival > crossroads_step + 1)
 		{
-			printf("[앰뷸런스 %c] 출발 시간 대기 중 (현재:%d, 출발:%d)\n",
+			printf("🚑 [앰뷸런스 %c] 출발 시간 대기 중 (현재:%d, 출발:%d)\n",
 				   vi->id, crossroads_step, vi->arrival);
 		}
 		else
@@ -437,9 +443,11 @@ void vehicle_loop(void *_vi)
 			}
 			else if (res == -1)
 			{
+				// 대기 상황은 이미 try_move에서 로그 출력
 			}
 			else if (res == 0)
 			{
+
 				step_barrier(); /* 마지막 배리어 통과 */
 				break;
 			}
@@ -451,5 +459,4 @@ void vehicle_loop(void *_vi)
 	/* 차량 종료 처리 */
 	vi->state = VEHICLE_STATUS_FINISHED;
 	vehicle_finished();
-	printf("[차량 %c] 시뮬레이션 종료\n", vi->id);
 }
